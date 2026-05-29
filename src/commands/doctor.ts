@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { Command } from 'commander';
+import { HOOK_EVENTS, type HookEvent, auditSettingsFile } from '../install/claude-settings.js';
 import { findCollisions, loadRegistry } from '../registry.js';
 import { listInboxFilenames } from '../storage.js';
 import { listWorkspaces } from '../workspace.js';
@@ -8,6 +10,28 @@ import { getStorageRoot } from './_shared.js';
 export interface DoctorFinding {
   level: 'error' | 'warn' | 'ok';
   message: string;
+}
+
+function repoSettingsCandidates(repoPath: string): string[] {
+  return [
+    path.join(repoPath, '.claude', 'settings.json'),
+    path.join(repoPath, '.claude', 'settings.local.json'),
+  ];
+}
+
+function missingHookEventsForRepo(repoPath: string): HookEvent[] {
+  // Hook event covered if EITHER settings.json or settings.local.json contains it.
+  const covered = new Set<HookEvent>();
+  let anyExists = false;
+  for (const file of repoSettingsCandidates(repoPath)) {
+    const audit = auditSettingsFile(file);
+    if (audit.exists) anyExists = true;
+    for (const evt of HOOK_EVENTS) {
+      if (!audit.missingEvents.includes(evt)) covered.add(evt);
+    }
+  }
+  if (!anyExists) return [...HOOK_EVENTS];
+  return HOOK_EVENTS.filter((e) => !covered.has(e));
 }
 
 export function runDoctor(): DoctorFinding[] {
@@ -30,6 +54,20 @@ export function runDoctor(): DoctorFinding[] {
       findings.push({
         level: 'warn',
         message: `repo path missing for slug "${e.slug}": ${e.repo_path}`,
+      });
+      continue;
+    }
+    const missing = missingHookEventsForRepo(e.repo_path);
+    if (missing.length === 0) {
+      findings.push({ level: 'ok', message: `hook wired for "${e.slug}"` });
+    } else {
+      findings.push({
+        level: 'error',
+        message: `hook missing for "${e.slug}" (${missing.join(', ')}) in ${path.join(
+          e.repo_path,
+          '.claude',
+          'settings.json',
+        )}`,
       });
     }
   }

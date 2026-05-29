@@ -66,10 +66,16 @@ describe('init', () => {
     expect(yaml).toContain('slug: tutor');
   });
 
-  it('creates workspace + marker with --workspace --auto-join', () => {
+  it('creates workspace + marker at resolved glob root', () => {
+    // Use a real tmp dir as the glob root so the marker lands deterministically
+    // on all platforms (avoids Windows writing into C:\dev\PIKMAT for real).
+    const umbrella = mkdtempSync(path.join(tmpdir(), 'umbrella-'));
+    const norm = (p: string): string => p.replace(/\\/g, '/');
+    const glob = `${norm(umbrella)}/**`;
     const repo = mkdtempSync(path.join(tmpdir(), 'agent-mail-repo-'));
-    runInit({ workspace: 'pikmat', autoJoin: 'C:/dev/PIKMAT/**' }, repo);
-    expect(existsSync(path.join(repo, '.agent-mail-workspace.yml'))).toBe(true);
+    const result = runInit({ workspace: 'pikmat', autoJoin: glob }, repo);
+    expect(norm(result.wroteMarker ?? '')).toBe(norm(umbrella));
+    expect(existsSync(path.join(umbrella, '.agent-mail-workspace.yml'))).toBe(true);
     const all = runListWorkspaces();
     expect(all.find((w) => w.name === 'pikmat')).toBeDefined();
   });
@@ -92,11 +98,16 @@ describe('workspace commands', () => {
     expect(() => runCreate('w1')).toThrow(/already exists/);
   });
 
-  it('set auto-join glob', () => {
+  it('set auto-join glob writes marker at resolved root', () => {
     runInit({});
     runCreate('pikmat');
-    runSetAutoJoin('pikmat', 'C:/dev/**');
-    expect(runListWorkspaces()[0]?.auto_join_glob).toBe('C:/dev/**');
+    const umbrella = mkdtempSync(path.join(tmpdir(), 'umbrella-'));
+    const norm = (p: string): string => p.replace(/\\/g, '/');
+    const glob = `${norm(umbrella)}/**`;
+    const result = runSetAutoJoin('pikmat', glob);
+    expect(result.workspace.auto_join_glob).toBe(glob);
+    expect(norm(result.markerDir)).toBe(norm(umbrella));
+    expect(existsSync(path.join(umbrella, '.agent-mail-workspace.yml'))).toBe(true);
   });
 
   it('remove workspace', () => {
