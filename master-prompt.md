@@ -146,6 +146,10 @@ M7 — Documentation
     the landscape doc in master-prompt.md verbatim — don't re-survey)
 
 M8 — Dogfood + ship
+  • BEFORE overwriting ~/.claude/skills/agent-mail/SKILL.md, confirm the
+    backup file ~/.claude/skills/agent-mail/SKILL.md.pre-v01.bak exists.
+    Ifat made it 2026-05-29; the prototype works well and must remain
+    rollback-able. If the .bak is missing, STOP and ask before writing.
   • Migrate Ifat's PIKMAT-AGENT-MAIL/ install to v0.1. She runs it for 24h
     across tutor/play/kefel sessions. Bug fixes from that.
   • npm publish (under Ifat's npm account — ask her to log in)
