@@ -6,3 +6,6 @@ export * from './registry.js';
 export * from './workspace.js';
 export * from './routing.js';
 export * from './repo-config.js';
+export * from './hook/resolve.js';
+export * from './hook/banner.js';
+export { runHook } from './hook/check-inbox.js';
