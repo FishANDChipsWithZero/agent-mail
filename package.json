@@ -31,5 +31,8 @@
     "type": "git",
     "url": "https://github.com/FishANDChipsWithZero/agent-mail.git"
   },
-  "keywords": ["agents", "claude-code", "mailbox", "async", "multi-repo"]
+  "keywords": ["agents", "claude-code", "mailbox", "async", "multi-repo"],
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
 }
