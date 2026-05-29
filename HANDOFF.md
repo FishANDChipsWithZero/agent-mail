@@ -107,6 +107,18 @@ git checkout -b feat/m5-auto-install
 
 7. **Settings.json merger logic deserves its own module** (`src/install/claude-settings.ts`) so it's unit-testable in isolation. JSON parse, deep-merge into `hooks.SessionStart` and `hooks.UserPromptSubmit` arrays, dedupe by command string, atomic write.
 
+### Known v0.1 limitation — multi-agent on same repo (issue #7)
+
+**v0.1 assumes one Claude session per repo.** Two sessions on the same repo:
+- resolve to the same slug,
+- share `~/.agent-mail/data/seen/<slug>.json` → first-fetcher-wins on banner,
+- cannot address each other (one mailbox).
+
+Workaround today: use git worktrees (different folder → different derived slug).
+Long-term: see GitHub issue #7 for v0.2 directions (per-session slug suffix vs per-session seen cursor vs reader/participant split).
+
+**MUST DO in M7 docs:** README, `docs/MULTI-REPO.md`, and `docs/FORMAT-REFERENCE.md` all need a "Known limitation: 1 session per repo" callout linking to issue #7. Don't ship v0.1 without this warning — users will hit it and assume the tool is broken.
+
 ### Reply still parked
 Tutor's mail set `needs_reply: true`. Post-M5, send the ack from inside agent-mail itself:
 ```bash

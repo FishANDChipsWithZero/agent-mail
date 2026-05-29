@@ -109,10 +109,10 @@ PR open — `feat/m5-auto-install`. 158/158 tests green locally.
 
 ## M7 — Documentation ⬜
 
-- ⬜ `README.md` — 30-second pitch + install + quickstart (replace M1 stub)
+- ⬜ `README.md` — 30-second pitch + install + quickstart (replace M1 stub) **+ "Known limitation: 1 session per repo" callout linking issue #7**
 - ⬜ `docs/QUICKSTART.md` — 5-minute walkthrough (single-repo case)
-- ⬜ `docs/MULTI-REPO.md` — the 4-repo umbrella case (Ifat's actual setup: tutor/play/kefel/whatsapp under PIKMAT)
-- ⬜ `docs/FORMAT-REFERENCE.md` — every YAML field, every CLI flag
+- ⬜ `docs/MULTI-REPO.md` — the 4-repo umbrella case (Ifat's actual setup: tutor/play/kefel/whatsapp under PIKMAT) **+ explicit section: "Running multiple sessions per repo (worktree workaround)"**
+- ⬜ `docs/FORMAT-REFERENCE.md` — every YAML field, every CLI flag **+ note on the shared seen-tracker behavior**
 - ⬜ `docs/MIGRATION.md` — moving from `C:\dev\PIKMAT-AGENT-MAIL\` to v0.1
 - ⬜ `docs/COMPARED.md` — agent-mail vs Claude Teams / A2A / Letta / MCP (use master-prompt.md verbatim, don't re-survey)
 
@@ -133,5 +133,6 @@ PR open — `feat/m5-auto-install`. 158/158 tests green locally.
 ## Open threads (parked / not blocking)
 
 - ⬜ Reply to tutor session 51 mail (set `needs_reply: true`) — ack the 3 recommendations folded into M4/M5. See HANDOFF.md §Inbox.
-- ⬜ Decide YAML lib in M2 (probably `yaml` — verify with Context7).
-- ⬜ Decide CLI framework in M3 (probably `commander` — verify with Context7).
+- ⬜ Decide YAML lib in M2 (probably `yaml` — verify with Context7). **DONE in M2.**
+- ⬜ Decide CLI framework in M3 (probably `commander` — verify with Context7). **DONE in M3.**
+- ⬜ **v0.2 candidate: multi-agent-per-repo (issue #7).** Two Claude sessions in the same repo share a slug + seen-tracker today. Worktree is the only workaround. Pick a direction (per-session slug suffix / per-session cursor / reader-participant split) before v0.2 planning.
