@@ -1,5 +1,6 @@
 import { unlinkSync } from 'node:fs';
 import { Command } from 'commander';
+import { saveWorkspaceMarker } from '../repo-config.js';
 import { ensureStorage } from '../storage.js';
 import {
   type Workspace,
@@ -11,6 +12,7 @@ import {
   workspaceFilePath,
 } from '../workspace.js';
 import { getStorageRoot } from './_shared.js';
+import { resolveGlobRoot } from './_workspace-root.js';
 
 function load(name: string): Workspace {
   const storage = getStorageRoot();
@@ -37,11 +39,22 @@ export function runAddMember(name: string, slug: string): Workspace {
   return ws;
 }
 
-export function runSetAutoJoin(name: string, glob: string): Workspace {
+export interface SetAutoJoinResult {
+  workspace: Workspace;
+  markerDir: string;
+}
+
+export function runSetAutoJoin(
+  name: string,
+  glob: string,
+  cwd: string = process.cwd(),
+): SetAutoJoinResult {
   const storage = getStorageRoot();
   const ws: Workspace = { ...load(name), auto_join_glob: glob };
   saveWorkspace(storage, ws);
-  return ws;
+  const markerDir = resolveGlobRoot(glob, cwd);
+  saveWorkspaceMarker(markerDir, { workspace: name, auto_join: true });
+  return { workspace: ws, markerDir };
 }
 
 export function runRemoveMember(name: string, slug: string): Workspace {
@@ -88,8 +101,9 @@ export function makeWorkspaceCommand(): Command {
         process.stdout.write(`${name}: members=${ws.members.join(',')}\n`);
       }
       if (opts.autoJoin) {
-        const ws = runSetAutoJoin(name, opts.autoJoin);
+        const { workspace: ws, markerDir } = runSetAutoJoin(name, opts.autoJoin);
         process.stdout.write(`${name}: auto_join_glob=${ws.auto_join_glob}\n`);
+        process.stdout.write(`wrote .agent-mail-workspace.yml in ${markerDir}\n`);
       }
       if (opts.removeMember) {
         const ws = runRemoveMember(name, opts.removeMember);

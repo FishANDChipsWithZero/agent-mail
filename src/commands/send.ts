@@ -1,6 +1,8 @@
+import path from 'node:path';
 import { Command, Option } from 'commander';
 import { type Message, type MessageType, type Priority, generateMessageId } from '../format.js';
-import { loadRegistry } from '../registry.js';
+import { HOOK_EVENTS, type HookEvent, auditSettingsFile } from '../install/claude-settings.js';
+import { type Registry, findBySlug, loadRegistry } from '../registry.js';
 import { loadRepoConfig } from '../repo-config.js';
 import { type RepoConfig, resolveRecipients } from '../routing.js';
 import { ensureStorage, writeMessage } from '../storage.js';
@@ -79,6 +81,8 @@ export function runSend(opts: SendOptions): SendResult {
     };
   }
 
+  const hookWarnings = checkRecipientHooks(route.recipients, registry);
+
   if (opts.toAll && route.recipients.length > 10 && !opts.yes) {
     throw new Error(
       `--to-all would deliver to ${route.recipients.length} recipients. Re-run with --yes to confirm.`,
@@ -122,7 +126,33 @@ export function runSend(opts: SendOptions): SendResult {
     written.push({ id, filename: stored.filename, recipients: [to] });
   }
 
-  return { written, warnings: route.warnings, excluded: route.excluded };
+  return { written, warnings: [...route.warnings, ...hookWarnings], excluded: route.excluded };
+}
+
+function checkRecipientHooks(recipients: string[], registry: Registry): string[] {
+  const warnings: string[] = [];
+  for (const slug of recipients) {
+    const entry = findBySlug(registry, slug);
+    if (!entry) continue; // unregistered recipient — handled elsewhere
+    const candidates = [
+      path.join(entry.repo_path, '.claude', 'settings.json'),
+      path.join(entry.repo_path, '.claude', 'settings.local.json'),
+    ];
+    const covered = new Set<HookEvent>();
+    for (const file of candidates) {
+      const audit = auditSettingsFile(file);
+      if (!audit.exists) continue;
+      for (const evt of HOOK_EVENTS) {
+        if (!audit.missingEvents.includes(evt)) covered.add(evt);
+      }
+    }
+    if (covered.size < HOOK_EVENTS.length) {
+      warnings.push(
+        `WARNING: recipient '${slug}' has no agent-mail hook in ${candidates[0]} — message will only deliver if recipient runs \`agent-mail inbox\` manually.`,
+      );
+    }
+  }
+  return warnings;
 }
 
 export function makeSendCommand(): Command {
