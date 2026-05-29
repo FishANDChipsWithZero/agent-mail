@@ -1,0 +1,35 @@
+{
+  "name": "agent-mail",
+  "version": "0.1.0-pre",
+  "description": "Filesystem-based async message bus for AI coding agents across repositories.",
+  "license": "MIT",
+  "author": "Ifat Biran",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "agent-mail": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FishANDChipsWithZero/agent-mail.git"
+  },
+  "keywords": ["agents", "claude-code", "mailbox", "async", "multi-repo"]
+}

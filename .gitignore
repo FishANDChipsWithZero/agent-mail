@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.agent-mail-test/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.local
