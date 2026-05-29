@@ -80,7 +80,7 @@ export function isMember(ws: Workspace, slug: string): boolean {
 }
 
 function normalizePath(p: string): string {
-  return path.resolve(p).replace(/\\/g, '/').toLowerCase();
+  return p.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
 }
 
 export function globToRegex(glob: string): RegExp {

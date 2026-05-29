@@ -20,7 +20,8 @@ export function registryFilePath(storage: StorageRoot): string {
 }
 
 export function deriveSlug(repoPath: string): string {
-  const folder = path.basename(repoPath);
+  const norm = repoPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  const folder = norm.slice(norm.lastIndexOf('/') + 1);
   return folder
     .toLowerCase()
     .replace(/_/g, '-')
@@ -30,7 +31,7 @@ export function deriveSlug(repoPath: string): string {
 }
 
 function normalizePath(p: string): string {
-  return path.resolve(p).replace(/\\/g, '/').toLowerCase();
+  return p.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
 }
 
 export function emptyRegistry(): Registry {
