@@ -33,6 +33,7 @@
   },
   "keywords": ["agents", "claude-code", "mailbox", "async", "multi-repo"],
   "dependencies": {
+    "commander": "^12.1.0",
     "yaml": "^2.9.0"
   }
 }
