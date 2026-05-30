@@ -1,133 +1,122 @@
 # HANDOFF — agent-mail v0.1 build
 
 > Working doc for the next build agent. Read this before SPEC.md / master-prompt.md.
-> Updated: 2026-05-30 by build agent (M5 session).
+> Updated: 2026-05-30 02:40 GMT+3 by build agent (M7 session, mid-rewrite of docs).
 
 ## What's done
 
 ### M1 — Repo skeleton + tooling — **MERGED (PR #2)**
-
-- TypeScript strict + ESM + Node 20+, Biome 1.9.4, Vitest 4.x, GitHub Actions matrix (Ubuntu/macOS/Windows × Node 20/22), `.gitattributes` LF, MIT.
-- `bin: agent-mail → dist/cli.js` in package.json.
+TypeScript strict + ESM + Node 20+, Biome 1.9.4, Vitest 4.x, CI matrix (Ubuntu/macOS/Windows × Node 20/22), `.gitattributes` LF, MIT. `bin: agent-mail → dist/cli.js`.
 
 ### M2 — Core message engine — **MERGED (PR #3)**
-
-- 5 modules: `format.ts`, `storage.ts`, `registry.ts`, `workspace.ts`, `routing.ts`.
-- Runtime dep: `yaml@^2.9.0` (ISC).
-- Atomic writes, seen-tracker with self-heal on corrupt JSON (closes tutor session 51 bug 2).
-- **Cross-platform path lesson (commit 7ae353d):** never use `path.basename`/`path.resolve` on user-supplied paths that may cross OS. Literal `\` → `/` then `lastIndexOf('/')`. Pinned in `memory/cross-platform-paths.md`.
+5 modules: `format.ts`, `storage.ts`, `registry.ts`, `workspace.ts`, `routing.ts`. Runtime dep: `yaml@^2.9.0` (ISC). Atomic writes, seen-tracker self-heals on corrupt JSON. **Cross-platform path lesson:** never `path.basename`/`path.resolve` on user paths that cross OS — literal `\` → `/` then `lastIndexOf('/')`. See `memory/cross-platform-paths.md`.
 
 ### M3 — CLI (commander) — **MERGED (PR #4)**
-
-- All SPEC §6 commands as `src/commands/<name>.ts`: send, inbox, reply, archive, status, map, workspace (create/add/list/show/remove), registry (scan/list/rename/forget), init, doctor.
-- Each command exports `run<X>(opts)` pure (testable) + `make<X>Command()` (commander wiring).
-- `AGENT_MAIL_ROOT` env var overrides storage root (test isolation via `mkdtempSync`).
-- E2E spawn test in `tests/cli.e2e.test.ts` walks `init → workspace → registry → send → inbox → reply → archive → doctor`.
-- Runtime dep added: `commander@^12.1.0` (MIT, Context7-verified).
-
-### M5 — Auto-install + doctor enforcement — **OPEN (feat/m5-auto-install)**
-
-- `src/install/claude-settings.ts` — pure module: `readSettings`, `mergeHookEntry` (dedupes by `HOOK_MARKER = 'check-inbox.js'` substring so re-installs are idempotent across path variations), `installHookIntoSettings` (one-time `.pre-agent-mail.bak` backup, atomic write), `auditSettingsFile`.
-- `src/install/hook-bin.ts` — `installHookShim` drops `<home>/.agent-mail/bin/check-inbox.js` (copies compiled `dist/hook/check-inbox.js` when available, falls back to a stub for pre-build/test). `buildHookCommand` returns `node "<path>" --auto` — Node-explicit so Windows ignores shebangs and spaces in HOME parse safely.
-- `commands/init.ts` — extended: bare `init` now installs the shim + merges hook entries into both `SessionStart` and `UserPromptSubmit` arrays in `~/.claude/settings.json`. `--no-hook` opts out. **Critical test isolation:** when `AGENT_MAIL_ROOT` env is set AND no `home` arg is passed, hook install is silently skipped, so tests can never touch the real `~/.claude/settings.json`. Tests use `runInit({ home: tmpHome })` to exercise the install path against a temp HOME.
-- `commands/doctor.ts` — walks registry; per slug, reads both `<repo>/.claude/settings.json` and `settings.local.json`, marks `error` when either `SessionStart` or `UserPromptSubmit` lacks an entry whose `command` includes `check-inbox.js`. Closes tutor session 51 bug 1.
-- `commands/send.ts` — pre-write, for each resolved recipient looks up `repo_path` in registry and audits the recipient repo's `.claude/settings.json(.local.json)`. Missing hook ⇒ stderr-bound `WARNING: recipient 'X' has no agent-mail hook in <path>` appended to `SendResult.warnings`. Send is **not** blocked.
-- `commands/_workspace-root.ts` — `resolveGlobRoot(glob, cwd)` = longest non-wildcard prefix → walks up to nearest existing directory. Output is forward-slash-form (per `memory/cross-platform-paths.md`); `path.join`/`fs` consume either form.
-- `commands/workspace.ts` — `runSetAutoJoin` now writes `.agent-mail-workspace.yml` at the resolved glob root (was: not at all). Returns `{ workspace, markerDir }`.
-- 32 new tests across 3 files: `tests/claude-settings.test.ts`, `tests/install.test.ts`, `tests/workspace-root.test.ts`. Total 158/158 local; matrix pending CI.
+All SPEC §6 commands under `src/commands/<name>.ts`. Each exports `run<X>(opts)` pure + `make<X>Command()` wiring. `AGENT_MAIL_ROOT` env overrides storage root for test isolation. E2E spawn test walks `init → workspace → registry → send → inbox → reply → archive → doctor`. Runtime dep: `commander@^12.1.0`.
 
 ### M4 — Hook payload — **MERGED (PR #5)**
+`src/hook/`: `resolve.ts` (slug resolution chain — per-repo `.agent-mail.yml` → registry → ancestor `.agent-mail-workspace.yml` glob → `none`), `banner.ts` (2000-token cap, critical never truncated), `check-inbox.ts` (`runHook(opts)` — silent when nothing fresh, swallows errors with stderr note so a broken hook never blocks the host session). Re-exported from `src/index.ts`.
 
-- `src/hook/` directory:
-  - `resolve.ts` — slug resolution chain: per-repo `.agent-mail.yml` → registry by repo_path → parent `.agent-mail-workspace.yml` glob match → `source: 'none'`. Honors `opt_out`. Repo root via `git rev-parse --show-toplevel` with cwd fallback.
-  - `banner.ts` — SPEC §7.2 banner with 2000-token cap. **Critical messages never truncated** (reserved first, lower priorities drop when cap hit). Approx tokens = `len / 4` (no tokenizer dep in v0.1).
-  - `check-inbox.ts` — `runHook(opts)` reads unread for resolved slug, filters via seen-tracker, prints banner, updates seen, exits 0. Silent (no output) when nothing fresh. `--all` bypasses seen. **Hook errors swallowed (exit 0 with stderr note) so a broken hook never blocks the host session.**
-- Re-exported from `src/index.ts`: `runHook`, `resolveSlug`, `buildBanner`.
-- 14 new hook tests in `tests/hook.test.ts`. Three-session integration test proves no cross-slug leakage. Corrupted-seen self-heal covered at both storage layer and hook layer.
-- Total: 126/126 tests across 9 files, matrix-green.
+### M5 — Auto-install + doctor enforcement — **MERGED (PR #6)**
+- `src/install/claude-settings.ts` — `readSettings`, `mergeHookEntry` (dedupes by `HOOK_MARKER = 'check-inbox.js'`), `installHookIntoSettings` (one-time `.pre-agent-mail.bak`, atomic write), `auditSettingsFile`.
+- `src/install/hook-bin.ts` — `installHookShim` drops `<home>/.agent-mail/bin/check-inbox.js`. `buildHookCommand` returns Node-explicit `node "<path>" --auto` so Windows ignores shebangs and spaces in HOME parse safely.
+- `commands/init.ts` — bare `init` installs shim + merges hook entries into both `SessionStart` and `UserPromptSubmit`. `--no-hook` opts out. **Test isolation:** when `AGENT_MAIL_ROOT` is set AND no `home` arg passed, hook install is silently skipped.
+- `commands/doctor.ts` — walks registry; per slug, reads both `<repo>/.claude/settings.json` AND `settings.local.json`, marks `error` when either event lacks a `check-inbox.js` entry.
+- `commands/send.ts` — audits each recipient's hook config; missing → stderr warning in `SendResult.warnings`. Send not blocked.
+- `commands/_workspace-root.ts` — `resolveGlobRoot(glob, cwd)` = longest non-wildcard prefix → walks up to existing dir. Forward-slash output.
+- 32 new tests across 3 files. 158/158 matrix-green.
 
-**Folded tutor session 51 requirements (all done):**
-- ✅ Node-only state R/W (storage.ts is the only writer of `.seen/<slug>.json`).
-- ✅ Type-safe seen-tracker (`storage.loadSeen` validates `string[]`, rejects bad shape).
-- ✅ Corrupt-seen fixture: `tests/storage.test.ts` (3 cases) + `tests/hook.test.ts` (PSCustomObject shape via runHook).
+### Multi-agent limitation docs follow-up — **MERGED (PR #8)**
+Standalone docs commit (HANDOFF + TODO updated for issue #7 callout requirement) that landed on `feat/m5-auto-install` after PR #6 was already merged. Re-landed as its own PR.
 
----
+## What's open
 
-## What's next
+### M7 — Documentation — **OPEN, MID-REWRITE (PR #9, branch `feat/m7-docs`)**
 
-See [TODO.md](./TODO.md) for the milestone-by-milestone checklist.
+PR #9 currently contains a first-draft of 6 docs:
+- `README.md` (rewrote M1 stub)
+- `docs/QUICKSTART.md`
+- `docs/MULTI-REPO.md` (with worktree-workaround section)
+- `docs/FORMAT-REFERENCE.md` (with seen-tracker caveat)
+- `docs/MIGRATION.md`
+- `docs/COMPARED.md`
 
-Immediate next step — M5 (auto-install + doctor enforcement):
+**CI is green (6/6 matrix). DO NOT MERGE YET.** Ifat reviewed the first draft and rejected the QUICKSTART. She caught structural gaps the entire doc set probably shares. Concrete feedback she gave:
+
+1. **QUICKSTART says "two terminals" — wrong.** The product is N-agent (her actual use = 4–5). Rewrite around N from the start, with 2 only as the simplest example before fan-out.
+2. **Doesn't explain what "mail" actually means here.** Needs to say: it's a file the hook reads at every `SessionStart` and `UserPromptSubmit`. Not Slack. Not real-time. More like "email with a banner notification."
+3. **`npm i -g agent-mail` is misleading** — not published yet. Need to be explicit: only `git clone + npm link` works today; npm form ships post-v0.1.
+4. **One mailbox or many?** Docs don't make clear: there's **one shared `inbox/` dir per machine** at `~/.agent-mail/data/inbox/`. Slugs/seen-trackers are per repo. No per-agent dir.
+5. **Cross-repo vs intra-repo behavior** isn't explained.
+6. **The example slugs `alpha` / `beta`** look like real repos or feel arbitrary. She said: use generic names but mark them clearly as placeholders, OR use the PIKMAT real names.
+7. **Who runs the commands?** Docs implicitly say "the user types `agent-mail send …`" — but Ifat clarified she doesn't run any commands manually. **Everything is internal — Claude inside each session runs the CLI via Bash tool.** This is the biggest misconception in my v1 docs.
+8. **Doc still uses `Slack-like` phrasing** in MULTI-REPO (copied from SPEC §5.2). She wants this gone — "more like email with notifications", not Slack.
+9. **List the actual files users get** — both files written by install AND files written at runtime. Currently scattered.
+
+**Decisions she made:**
+- Q "which example repos in QUICKSTART": **generic names clearly marked as placeholders**.
+- Q "how many agents in main scenario": **2 then expand to N** (simplest first, fan-out next).
+- Q "v0.2 scope before ship": **must fix issue #7 (multi-session-per-repo) before any publish**. So the docs should describe the v0.1+#7 product as the shipping product, not v0.1 with a known limitation. Rewrite docs assuming `multi-session-per-repo works`. Issue #7 = blocking, not parking.
+- **DO NOT publish anything until she's tested it.** Includes npm publish, GitHub release, README "shipped" badge, and merging PR #9.
+
+### Session-context investigation (started, not finished)
+
+Mid-conversation Ifat said: "this is all internal, I don't run anything." Build agent didn't have ground truth on how the sister sessions actually use agent-mail (do they auto-fetch the body? do they call `send-mail.ps1` themselves? do they archive?). Build agent **sent a 6-question survey to the tutor session** via the prototype `send-mail.ps1`:
 
 ```
-git checkout main && git pull
-git checkout -b feat/m5-auto-install
+C:\dev\PIKMAT-AGENT-MAIL\inbox\2026-05-30_FROM-agent-mail_TO-tutor_agent-mail-v0-1-docs.md
 ```
 
-### M5 scope per master-prompt §M5 + tutor session 51 fold-ins
+It's `needs_reply: true`. Tutor will surface it via the prototype hook on its next prompt. **Reply expected as a new file in the same inbox dir: `2026-05-30_FROM-tutor_TO-agent-mail_*.md`** — poll that dir.
 
-1. **`agent-mail init` writes the hook into `~/.claude/settings.json`.**
-   - Merge with existing settings, do NOT clobber.
-   - Back up existing file to `~/.claude/settings.json.pre-agent-mail.bak` before write.
-   - Hook commands per SPEC §7.1:
-     ```json
-     {
-       "hooks": {
-         "SessionStart": [
-           { "type": "command", "command": "node ~/.agent-mail/bin/check-inbox.js --auto" }
-         ],
-         "UserPromptSubmit": [
-           { "type": "command", "command": "node ~/.agent-mail/bin/check-inbox.js --auto" }
-         ]
-       }
-     }
-     ```
-   - Resolve `~` cross-platform (homedir). Drop `dist/hook/check-inbox.js` at `~/.agent-mail/bin/check-inbox.js` (or symlink — pick whichever survives `npm i -g` cleanly).
+Next agent should:
+1. Check `C:\dev\PIKMAT-AGENT-MAIL\inbox\` for a reply from tutor (filename starts `*_FROM-tutor_TO-agent-mail_*`). If not there yet, also check `C:\dev\PIKMAT-AGENT-MAIL\archive\`.
+2. Optionally send the same survey to `kefel` (`C:\dev\KEFEL\KEFEL`) for a second data point. Both have the prototype hook wired.
+3. Use the survey answers as ground truth before rewriting QUICKSTART. Until then, don't write more docs — drafts will be wrong.
 
-2. **`agent-mail init --here` already writes per-repo `.agent-mail.yml` (M3).** Keep that path; add hook check if the new global init flow runs.
+### Ground truth captured this session (don't re-derive)
 
-3. **`agent-mail workspace add <name> --auto-join <glob>` already writes `.agent-mail-workspace.yml` at cwd (M3).** Confirm SPEC §8.3 expectation that it lands at the **resolved root** of the glob, not arbitrary cwd. Consider walking the glob root and dropping the marker there.
+- Prototype lives at `C:\dev\PIKMAT-AGENT-MAIL\` — still the live infra. Inbox dir, archive dir, `.seen/<slug>.json`, `send-mail.ps1`, `check-inbox.ps1`.
+- Confirmed wired slugs (read from their `.claude/settings.json`):
+  - `tutor` → `C:\dev\ExerciseHelperMath`
+  - `kefel` → `C:\dev\KEFEL\KEFEL`
+  - `play` → `C:\dev\PIKMAT\project-seeding-pod_1` (per master-prompt; settings.json not re-verified this session)
+  - `whatsapp` → no repo yet
+- `~/.agent-mail/` **does NOT exist on Ifat's machine yet.** v0.1 has never been installed. The prototype is still the only live system.
+- All 3 active seen-trackers (`tutor`, `play`, `kefel`) hold recent message IDs — system is in active use.
 
-4. **`agent-mail doctor` upgrades:**
-   - Walk registry. For each slug, read `<repo>/.claude/settings.json` (or settings.local.json — both?). Confirm both `SessionStart` and `UserPromptSubmit` arrays contain an entry whose `command` matches `check-inbox.js`.
-   - Flag missing as `error` (closes tutor session 51 bug 1).
-   - Existing checks stay: storage exists, registry valid, slug collisions, workspace members, inbox files parseable.
+## v0.2 = single requirement (decided this session)
 
-5. **`agent-mail send` warns on undeliverable recipient (highest-value UX win).**
-   - Before atomic write, for each resolved recipient: look up their `repo_path` in registry, read `<repo>/.claude/settings.json`, check for hook entry.
-   - If missing: write to stderr:
-     ```
-     [agent-mail] WARNING: recipient 'tutor' has no agent-mail hook in
-     C:\dev\ExerciseHelperMath\.claude\settings.json — message will only
-     deliver if recipient runs `agent-mail inbox` manually.
-     ```
-   - Do NOT block. Sender may have a good reason.
+**Multi-session-per-repo (issue #7) MUST work before publishing v0.1.** That is the entire v0.2 scope as Ifat defined it.
 
-6. **Cross-platform tests** — every path-touching test must pass on the matrix. Re-read `memory/cross-platform-paths.md`.
+Three candidate directions still live in issue #7:
+- Per-session slug suffix via env var (`AGENT_MAIL_SUFFIX=s2`)
+- Per-session seen tracker keyed by `(slug, session_id)`
+- Reader/participant split
 
-7. **Settings.json merger logic deserves its own module** (`src/install/claude-settings.ts`) so it's unit-testable in isolation. JSON parse, deep-merge into `hooks.SessionStart` and `hooks.UserPromptSubmit` arrays, dedupe by command string, atomic write.
+No decision yet on which direction. **Write the v0.2 fix in a separate PR after M7 docs reflect reality.** The docs should describe the v0.1+#7-fixed product as if it ships together (which it will).
 
-### Known v0.1 limitation — multi-agent on same repo (issue #7)
+## Workflow per milestone (memorize)
 
-**v0.1 assumes one Claude session per repo.** Two sessions on the same repo:
-- resolve to the same slug,
-- share `~/.agent-mail/data/seen/<slug>.json` → first-fetcher-wins on banner,
-- cannot address each other (one mailbox).
+1. `git checkout main && git pull`
+2. `git checkout -b <type>/<milestone-slug>`
+3. Implement.
+4. **Pre-flight:** `npm run lint && npm run build && npm test` — all green.
+5. Commit explicit paths (never `git add -A`). Conventional Commits. Body = why.
+6. `git push -u origin <branch>` then `gh pr create` with Summary + Test plan + Risk.
+7. `gh pr view` + `gh pr checks` — wait for matrix green.
+8. **Do NOT self-merge. Do NOT publish to npm. Do NOT cut a GitHub release.** All ship gates are Ifat's call.
 
-Workaround today: use git worktrees (different folder → different derived slug).
-Long-term: see GitHub issue #7 for v0.2 directions (per-session slug suffix vs per-session seen cursor vs reader/participant split).
+## Hard "do nots"
 
-**MUST DO in M7 docs:** README, `docs/MULTI-REPO.md`, and `docs/FORMAT-REFERENCE.md` all need a "Known limitation: 1 session per repo" callout linking to issue #7. Don't ship v0.1 without this warning — users will hit it and assume the tool is broken.
-
-### Reply still parked
-Tutor's mail set `needs_reply: true`. Post-M5, send the ack from inside agent-mail itself:
-```bash
-agent-mail send --from agent-mail --to tutor \
-  --topic "ack — all 3 recommendations shipped in M4+M5" \
-  --body "..."
-```
-
----
+- Never push to `main`. Never force-push to `main`.
+- Never `git add -A` / `git add .` — explicit paths only.
+- Never `--no-verify`, never `--no-gpg-sign`.
+- Never delete `~/.claude/skills/agent-mail/SKILL.md.pre-v01.bak`.
+- Never delete or modify `C:\dev\PIKMAT-AGENT-MAIL\` — it's live infra Ifat uses across 4 repos.
+- Never write to the real `~/.claude/settings.json` during dev or test runs — temp HOME via `runInit({ home: tmpHome })`.
+- Never change YAML format (SPEC §4) without an approved GitHub Discussion.
+- Never publish to npm, never cut a GitHub release, never merge PR #9 without explicit Ifat green-light. **She said: "I don't want you to publish anything before I check it works."**
 
 ## Files to read before writing code (in order)
 
@@ -135,29 +124,6 @@ agent-mail send --from agent-mail --to tutor \
 2. `master-prompt.md` — milestone plan
 3. `HANDOFF.md` (this file) — what's done + open threads
 4. `TODO.md` — milestone checklist
-5. `C:\dev\PIKMAT-AGENT-MAIL\check-inbox.js` — original prototype (M4 already ported, but re-read for §7.1 details)
-6. `C:\dev\PIKMAT-AGENT-MAIL\send-mail.js` — original CLI sender
-7. `C:\Users\ifatb\.claude\skills\agent-mail\SKILL.md` — existing UX shape
-8. `C:\Users\ifatb\.claude\settings.json` — see real hook config Ifat already runs (do NOT modify during dev — write to a temp path in tests)
-
-If 5-7 are missing or unreadable: STOP and ping Ifat via GitHub Discussion.
-
-## Workflow per milestone (memorize)
-
-1. `git checkout main && git pull`
-2. `git checkout -b <type>/<milestone-slug>`
-3. Implement.
-4. **Pre-flight:** `npm run lint && npm run build && npm test` — all green or fix root cause.
-5. Commit explicit paths (never `git add -A`). Conventional Commits format. Body = why.
-6. `git push -u origin <branch>` then `gh pr create` with Summary + Test plan + Risk callouts.
-7. `gh pr view` + `gh pr checks` — wait for matrix to be green.
-8. **Do NOT self-merge.** Wait for Ifat.
-
-## Hard "do nots" (reminder)
-- Never push to `main`. Never force-push to `main`.
-- Never `git add -A` / `git add .` — explicit paths only.
-- Never `--no-verify`, never `--no-gpg-sign`.
-- Never delete `~/.claude/skills/agent-mail/SKILL.md.pre-v01.bak`.
-- Never delete or modify `C:\dev\PIKMAT-AGENT-MAIL\` — it's live infra Ifat uses across 4 repos right now.
-- Never write to `~/.claude/settings.json` during dev or test runs — always to a temp path / fixture.
-- Never change YAML format (SPEC §4) without an approved `Decision needed:` GitHub Discussion.
+5. `C:\dev\PIKMAT-AGENT-MAIL\check-inbox.ps1` and `send-mail.ps1` — live prototype
+6. `C:\Users\ifatb\.claude\skills\agent-mail\SKILL.md` — existing UX shape
+7. Any new reply at `C:\dev\PIKMAT-AGENT-MAIL\inbox\*_FROM-tutor_TO-agent-mail_*.md` — survey answers from tutor (if back)
